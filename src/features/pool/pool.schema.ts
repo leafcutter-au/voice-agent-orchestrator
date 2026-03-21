@@ -3,7 +3,10 @@ import { z } from 'zod';
 export const AgentStatusEnum = z.enum([
   'starting',
   'warm',
-  'active',
+  'assigned',
+  'joining',
+  'in_meeting',
+  'interviewing',
   'draining',
   'failed',
 ]);

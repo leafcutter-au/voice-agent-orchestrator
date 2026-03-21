@@ -9,7 +9,7 @@ export default async function PoolPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Agent Pool</h1>
-      <PoolOverview agents={agents} counts={counts} />
+      <PoolOverview initialAgents={agents} initialCounts={counts} />
     </div>
   );
 }

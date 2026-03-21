@@ -16,7 +16,8 @@ export interface Database {
         Row: {
           id: string;
           container_id: string;
-          status: 'starting' | 'warm' | 'active' | 'draining' | 'failed';
+          container_name: string | null;
+          status: 'starting' | 'warm' | 'assigned' | 'joining' | 'in_meeting' | 'interviewing' | 'draining' | 'failed';
           host_port: number | null;
           internal_ip: string | null;
           session_id: string | null;
@@ -30,7 +31,8 @@ export interface Database {
         Insert: {
           id?: string;
           container_id: string;
-          status?: 'starting' | 'warm' | 'active' | 'draining' | 'failed';
+          container_name?: string | null;
+          status?: 'starting' | 'warm' | 'assigned' | 'joining' | 'in_meeting' | 'interviewing' | 'draining' | 'failed';
           host_port?: number | null;
           internal_ip?: string | null;
           session_id?: string | null;
@@ -44,7 +46,8 @@ export interface Database {
         Update: {
           id?: string;
           container_id?: string;
-          status?: 'starting' | 'warm' | 'active' | 'draining' | 'failed';
+          container_name?: string | null;
+          status?: 'starting' | 'warm' | 'assigned' | 'joining' | 'in_meeting' | 'interviewing' | 'draining' | 'failed';
           host_port?: number | null;
           internal_ip?: string | null;
           session_id?: string | null;

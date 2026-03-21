@@ -55,7 +55,12 @@ class PoolService {
       logger.warn({ namespace: this.namespace }, 'Could not read agent env file');
     }
 
+    // Generate a short readable name: paia-agent-<4 hex chars>
+    const shortId = Math.random().toString(16).slice(2, 6);
+    const containerName = `paia-agent-${shortId}`;
+
     const container = await docker.createContainer({
+      name: containerName,
       Image: POOL_CONFIG.IMAGE,
       Env: envVars,
       ExposedPorts: { [`${POOL_CONFIG.AGENT_PORT}/tcp`]: {} },
@@ -72,6 +77,7 @@ class PoolService {
 
     const agent = await this.api.insertAgent({
       container_id: container.id,
+      container_name: containerName,
       status: 'starting',
       internal_ip: ip,
     });
@@ -157,7 +163,7 @@ class PoolService {
     }
 
     await this.api.updateAgent(agent.id, {
-      status: 'active',
+      status: 'assigned',
       session_id: payload.sessionId,
       assigned_at: new Date().toISOString(),
     });
@@ -176,14 +182,17 @@ class PoolService {
     const logger = getLogger();
     const ctx = { namespace: this.namespace };
 
+    const busyStatuses = ['assigned', 'joining', 'in_meeting', 'interviewing'] as const;
     const agents = await this.api.getAgentsByStatus([
       'starting',
       'warm',
-      'active',
+      ...busyStatuses,
       'draining',
     ]);
 
-    const active = agents.filter((a) => a.status === 'active').length;
+    const active = agents.filter((a) =>
+      (busyStatuses as readonly string[]).includes(a.status),
+    ).length;
     const warm = agents.filter((a) => a.status === 'warm').length;
     const desired = Math.max(
       POOL_CONFIG.MIN_WARM,
@@ -246,7 +255,10 @@ class PoolService {
     const agents = await this.api.getAgentsByStatus([
       'starting',
       'warm',
-      'active',
+      'assigned',
+      'joining',
+      'in_meeting',
+      'interviewing',
     ]);
 
     for (const agent of agents) {
@@ -259,13 +271,19 @@ class PoolService {
         );
         const data = await resp.json();
 
-        // Sync status if agent reports differently
-        if (data.status === 'active' && agent.status === 'warm') {
-          await this.api.updateAgent(agent.id, { status: 'active' });
-        } else if (data.status === 'draining') {
-          await this.api.updateAgent(agent.id, { status: 'draining' });
-          // Schedule destruction
-          setTimeout(() => this.destroyAgent(agent.id).catch(() => {}), 30000);
+        // Sync granular status from agent — the agent is the source of truth
+        const agentStatus = data.status as string;
+        const validStatuses = [
+          'warm', 'assigned', 'joining', 'in_meeting', 'interviewing', 'draining',
+        ];
+        if (validStatuses.includes(agentStatus) && agentStatus !== agent.status) {
+          await this.api.updateAgent(agent.id, {
+            status: agentStatus as typeof agent.status,
+          });
+
+          if (agentStatus === 'draining') {
+            setTimeout(() => this.destroyAgent(agent.id).catch(() => {}), 30000);
+          }
         }
 
         await this.api.updateAgent(agent.id, {

@@ -4,74 +4,107 @@ import { formatDistanceToNow } from 'date-fns';
 import { AgentStatusBadge } from './agent-status-badge';
 import { PoolControls } from './pool-controls';
 import { useRealtimeTable } from '@/hooks/use-realtime';
+import { usePoolData } from '@/hooks/use-pool-data';
 import type { Database } from '@/lib/supabase/database.types';
 
 type PoolAgent = Database['public']['Tables']['pool_agents']['Row'];
 
 interface PoolOverviewProps {
-  agents: PoolAgent[];
-  counts: Record<string, number>;
+  initialAgents: PoolAgent[];
+  initialCounts: Record<string, number>;
 }
 
-export function PoolOverview({ agents, counts }: PoolOverviewProps) {
+const statusGroups = [
+  { key: 'warm', label: 'Warm', color: 'bg-green-500' },
+  { key: 'assigned', label: 'Assigned', color: 'bg-blue-400' },
+  { key: 'joining', label: 'Joining', color: 'bg-blue-500' },
+  { key: 'in_meeting', label: 'In Meeting', color: 'bg-indigo-500' },
+  { key: 'interviewing', label: 'Interviewing', color: 'bg-purple-500' },
+  { key: 'starting', label: 'Starting', color: 'bg-yellow-500' },
+  { key: 'draining', label: 'Draining', color: 'bg-orange-500' },
+  { key: 'failed', label: 'Failed', color: 'bg-red-500' },
+] as const;
+
+export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps) {
+  const { data } = usePoolData({
+    agents: initialAgents,
+    counts: initialCounts,
+  });
   useRealtimeTable('pool_agents', ['pool-agents']);
 
+  const agents = data?.agents ?? initialAgents;
+  const counts = data?.counts ?? initialCounts;
   const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+  const busyCount =
+    (counts['assigned'] ?? 0) +
+    (counts['joining'] ?? 0) +
+    (counts['in_meeting'] ?? 0) +
+    (counts['interviewing'] ?? 0);
 
   return (
     <div className="space-y-6">
-      {/* Stats cards */}
-      <div className="grid grid-cols-5 gap-4">
-        {(['starting', 'warm', 'active', 'draining', 'failed'] as const).map(
-          (status) => (
-            <div key={status} className="border-border rounded-lg border p-4">
-              <div className="text-muted-foreground text-sm capitalize">
-                {status}
-              </div>
-              <div className="mt-1 text-2xl font-bold">{counts[status] ?? 0}</div>
-            </div>
-          ),
-        )}
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="border-border rounded-lg border p-4">
+          <div className="text-muted-foreground text-sm">Total</div>
+          <div className="mt-1 text-2xl font-bold">{total}</div>
+        </div>
+        <div className="border-border rounded-lg border p-4">
+          <div className="text-muted-foreground text-sm">Warm</div>
+          <div className="mt-1 text-2xl font-bold text-green-600">
+            {counts['warm'] ?? 0}
+          </div>
+        </div>
+        <div className="border-border rounded-lg border p-4">
+          <div className="text-muted-foreground text-sm">Busy</div>
+          <div className="mt-1 text-2xl font-bold text-purple-600">
+            {busyCount}
+          </div>
+        </div>
+        <div className="border-border rounded-lg border p-4">
+          <div className="text-muted-foreground text-sm">Starting</div>
+          <div className="mt-1 text-2xl font-bold text-yellow-600">
+            {counts['starting'] ?? 0}
+          </div>
+        </div>
+        <div className="border-border rounded-lg border p-4">
+          <div className="text-muted-foreground text-sm">Failed</div>
+          <div className="mt-1 text-2xl font-bold text-red-600">
+            {counts['failed'] ?? 0}
+          </div>
+        </div>
       </div>
 
       {/* Pool status bar */}
       {total > 0 && (
-        <div className="flex h-4 overflow-hidden rounded-full">
-          {(counts['warm'] ?? 0) > 0 && (
-            <div
-              className="bg-green-500"
-              style={{ width: `${((counts['warm'] ?? 0) / total) * 100}%` }}
-              title={`Warm: ${counts['warm']}`}
-            />
-          )}
-          {(counts['active'] ?? 0) > 0 && (
-            <div
-              className="bg-blue-500"
-              style={{ width: `${((counts['active'] ?? 0) / total) * 100}%` }}
-              title={`Active: ${counts['active']}`}
-            />
-          )}
-          {(counts['starting'] ?? 0) > 0 && (
-            <div
-              className="bg-yellow-500"
-              style={{ width: `${((counts['starting'] ?? 0) / total) * 100}%` }}
-              title={`Starting: ${counts['starting']}`}
-            />
-          )}
-          {(counts['draining'] ?? 0) > 0 && (
-            <div
-              className="bg-orange-500"
-              style={{ width: `${((counts['draining'] ?? 0) / total) * 100}%` }}
-              title={`Draining: ${counts['draining']}`}
-            />
-          )}
-          {(counts['failed'] ?? 0) > 0 && (
-            <div
-              className="bg-red-500"
-              style={{ width: `${((counts['failed'] ?? 0) / total) * 100}%` }}
-              title={`Failed: ${counts['failed']}`}
-            />
-          )}
+        <div className="space-y-2">
+          <div className="flex h-4 overflow-hidden rounded-full">
+            {statusGroups
+              .filter((s) => (counts[s.key] ?? 0) > 0)
+              .map((s) => (
+                <div
+                  key={s.key}
+                  className={s.color}
+                  style={{
+                    width: `${((counts[s.key] ?? 0) / total) * 100}%`,
+                  }}
+                  title={`${s.label}: ${counts[s.key]}`}
+                />
+              ))}
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs">
+            {statusGroups
+              .filter((s) => (counts[s.key] ?? 0) > 0)
+              .map((s) => (
+                <div key={s.key} className="flex items-center gap-1">
+                  <div className={`h-2 w-2 rounded-full ${s.color}`} />
+                  <span className="text-muted-foreground">
+                    {s.label}: {counts[s.key]}
+                  </span>
+                </div>
+              ))}
+          </div>
         </div>
       )}
 
@@ -82,7 +115,7 @@ export function PoolOverview({ agents, counts }: PoolOverviewProps) {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-2 text-left font-medium">Container</th>
+              <th className="px-4 py-2 text-left font-medium">Agent</th>
               <th className="px-4 py-2 text-left font-medium">Status</th>
               <th className="px-4 py-2 text-left font-medium">IP</th>
               <th className="px-4 py-2 text-left font-medium">Session</th>
@@ -93,8 +126,10 @@ export function PoolOverview({ agents, counts }: PoolOverviewProps) {
           <tbody className="divide-border divide-y">
             {agents.map((agent) => (
               <tr key={agent.id} className="hover:bg-muted/30">
-                <td className="px-4 py-2 font-mono text-xs">
-                  {agent.container_id.substring(0, 12)}
+                <td className="px-4 py-2">
+                  <div className="text-sm font-medium">
+                    {agent.container_name ?? agent.container_id.substring(0, 12)}
+                  </div>
                 </td>
                 <td className="px-4 py-2">
                   <AgentStatusBadge status={agent.status} />

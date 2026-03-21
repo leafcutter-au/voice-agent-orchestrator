@@ -90,7 +90,10 @@ class PoolApi {
     const counts: Record<string, number> = {
       starting: 0,
       warm: 0,
-      active: 0,
+      assigned: 0,
+      joining: 0,
+      in_meeting: 0,
+      interviewing: 0,
       draining: 0,
       failed: 0,
     };
