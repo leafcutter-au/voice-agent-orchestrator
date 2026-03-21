@@ -17,7 +17,7 @@ export default async function SessionsPage({ searchParams }: SessionsPageProps) 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Sessions</h1>
-      <SessionsTable sessions={sessions} totalCount={count} />
+      <SessionsTable initialSessions={sessions} initialCount={count} />
     </div>
   );
 }

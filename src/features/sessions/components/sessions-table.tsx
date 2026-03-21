@@ -4,18 +4,29 @@ import Link from 'next/link';
 import { formatDistanceToNow, format } from 'date-fns';
 import { SessionStatusBadge } from './session-status-badge';
 import { useRealtimeTable } from '@/hooks/use-realtime';
+import { useSessionsData } from '@/hooks/use-sessions-data';
 import type { Database } from '@/lib/supabase/database.types';
 import type { SessionStatus } from '../sessions.schema';
 
 type Session = Database['public']['Tables']['voice_sessions']['Row'];
 
 interface SessionsTableProps {
-  sessions: Session[];
-  totalCount: number;
+  initialSessions: Session[];
+  initialCount: number;
 }
 
-export function SessionsTable({ sessions, totalCount }: SessionsTableProps) {
+export function SessionsTable({
+  initialSessions,
+  initialCount,
+}: SessionsTableProps) {
+  const { data } = useSessionsData({
+    sessions: initialSessions,
+    count: initialCount,
+  });
   useRealtimeTable('voice_sessions', ['sessions']);
+
+  const sessions = data?.sessions ?? initialSessions;
+  const totalCount = data?.count ?? initialCount;
 
   return (
     <div className="space-y-4">

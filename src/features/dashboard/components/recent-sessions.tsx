@@ -4,13 +4,21 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { SessionStatusBadge } from '@/features/sessions/components/session-status-badge';
 import { useRealtimeTable } from '@/hooks/use-realtime';
+import { useRecentSessions } from '@/hooks/use-sessions-data';
 import type { Database } from '@/lib/supabase/database.types';
 import type { SessionStatus } from '@/features/sessions/sessions.schema';
 
 type Session = Database['public']['Tables']['voice_sessions']['Row'];
 
-export function RecentSessions({ sessions }: { sessions: Session[] }) {
+export function RecentSessions({
+  initialSessions,
+}: {
+  initialSessions: Session[];
+}) {
+  const { data: sessions } = useRecentSessions(initialSessions);
   useRealtimeTable('voice_sessions', ['dashboard-sessions']);
+
+  const displaySessions = sessions ?? initialSessions;
 
   return (
     <div className="space-y-3">
@@ -35,7 +43,7 @@ export function RecentSessions({ sessions }: { sessions: Session[] }) {
             </tr>
           </thead>
           <tbody className="divide-border divide-y">
-            {sessions.map((session) => (
+            {displaySessions.map((session) => (
               <tr key={session.id} className="hover:bg-muted/30">
                 <td className="px-4 py-2">
                   <Link
@@ -62,7 +70,7 @@ export function RecentSessions({ sessions }: { sessions: Session[] }) {
                 </td>
               </tr>
             ))}
-            {sessions.length === 0 && (
+            {displaySessions.length === 0 && (
               <tr>
                 <td
                   colSpan={4}

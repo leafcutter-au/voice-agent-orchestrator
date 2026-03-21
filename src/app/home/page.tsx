@@ -12,9 +12,9 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
-      <StatsCards poolCounts={poolCounts} recentSessions={recentSessions} />
+      <StatsCards initialPoolCounts={poolCounts} initialSessions={recentSessions} />
       <PoolStatusBar counts={poolCounts} />
-      <RecentSessions sessions={recentSessions} />
+      <RecentSessions initialSessions={recentSessions} />
     </div>
   );
 }
