@@ -322,6 +322,19 @@ class PoolService {
       'Destroying agent',
     );
 
+    // Cancel any linked session that's still in progress
+    if (agent.session_id) {
+      try {
+        await this.api.cancelSession(agent.session_id);
+        await this.api.insertSessionEvent(agent.session_id, 'agent_destroyed');
+      } catch (e) {
+        logger.warn(
+          { namespace: this.namespace, agentId, sessionId: agent.session_id, error: e },
+          'Failed to cancel linked session',
+        );
+      }
+    }
+
     await this.destroyContainer(agent.container_id);
     await this.api.deleteAgent(agentId);
   }
@@ -350,6 +363,205 @@ class PoolService {
 
   async getAllAgents() {
     return this.api.getAllAgents();
+  }
+
+  async stopAgent(agentId: string) {
+    const logger = getLogger();
+    const agent = await this.api.getAgentById(agentId);
+    if (!agent) throw new Error('Agent not found');
+    if (!agent.internal_ip) throw new Error('Agent has no IP address');
+
+    const stoppableStatuses = ['interviewing', 'in_meeting'];
+    if (!stoppableStatuses.includes(agent.status)) {
+      throw new Error(`Agent cannot be stopped in status: ${agent.status}`);
+    }
+
+    logger.info(
+      { namespace: this.namespace, agentId },
+      'Sending stop request to agent',
+    );
+
+    const resp = await fetch(
+      `http://${agent.internal_ip}:${POOL_CONFIG.AGENT_PORT}/stop`,
+      { method: 'POST', signal: AbortSignal.timeout(10000) },
+    );
+
+    if (!resp.ok) {
+      const detail = await resp.text();
+      throw new Error(`Stop request failed: ${resp.status} — ${detail}`);
+    }
+
+    if (agent.session_id) {
+      await this.api.insertSessionEvent(agent.session_id, 'stop_requested');
+    }
+  }
+
+  async getAgentWithSession(agentId: string) {
+    return this.api.getAgentWithSession(agentId);
+  }
+
+  private async execInContainer(containerId: string, cmd: string[], env?: string[]): Promise<string> {
+    const container = docker.getContainer(containerId);
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdout: true,
+      AttachStderr: true,
+      Env: env,
+    });
+    const stream = await exec.start({ Detach: false, Tty: false });
+
+    return new Promise<string>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => {
+        // Docker multiplexed stream: 8-byte header per frame
+        // header[0] = stream type (1=stdout, 2=stderr)
+        // header[4..7] = payload size (big-endian uint32)
+        let offset = 0;
+        while (offset < chunk.length) {
+          if (offset + 8 > chunk.length) break;
+          const size = chunk.readUInt32BE(offset + 4);
+          if (offset + 8 + size > chunk.length) {
+            chunks.push(chunk.subarray(offset + 8));
+            break;
+          }
+          chunks.push(chunk.subarray(offset + 8, offset + 8 + size));
+          offset += 8 + size;
+        }
+      });
+      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      stream.on('error', reject);
+    });
+  }
+
+  async getPipecatLogs(agentId: string): Promise<string> {
+    const agent = await this.api.getAgentById(agentId);
+    if (!agent) throw new Error('Agent not found');
+    return this.execInContainer(agent.container_id, [
+      'sh', '-c', 'cat /pipecat/logs/pipecat_*.log 2>/dev/null | tail -500',
+    ]);
+  }
+
+  async getLatencyData(agentId: string): Promise<Record<string, unknown>[]> {
+    const agent = await this.api.getAgentById(agentId);
+    if (!agent) throw new Error('Agent not found');
+    const raw = await this.execInContainer(agent.container_id, [
+      'sh', '-c', 'cat /pipecat/logs/latency_*.jsonl 2>/dev/null',
+    ]);
+    if (!raw.trim()) return [];
+    return raw
+      .trim()
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line));
+  }
+
+  async getInterviewResults(agentId: string): Promise<Record<string, unknown> | null> {
+    const agent = await this.api.getAgentById(agentId);
+    if (!agent) throw new Error('Agent not found');
+    try {
+      const raw = await this.execInContainer(agent.container_id, [
+        'cat', '/pipecat/logs/interview_results.json',
+      ]);
+      if (!raw.trim()) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  async getContainerStats(agentId: string) {
+    const agent = await this.api.getAgentById(agentId);
+    if (!agent) throw new Error('Agent not found');
+    const container = docker.getContainer(agent.container_id);
+    const stats = await container.stats({ stream: false }) as unknown as Record<string, unknown>;
+
+    // Parse CPU
+    const cpuStats = stats.cpu_stats as Record<string, unknown>;
+    const preCpuStats = stats.precpu_stats as Record<string, unknown>;
+    const cpuUsage = cpuStats.cpu_usage as Record<string, unknown>;
+    const preCpuUsage = preCpuStats.cpu_usage as Record<string, unknown>;
+    const cpuDelta = (cpuUsage.total_usage as number) - (preCpuUsage.total_usage as number);
+    const systemDelta = (cpuStats.system_cpu_usage as number) - (preCpuStats.system_cpu_usage as number);
+    const numCpus = ((cpuStats.cpu_usage as Record<string, unknown>)?.percpu_usage as unknown[])?.length ?? 1;
+    const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * numCpus * 100 : 0;
+
+    // Parse Memory
+    const memStats = stats.memory_stats as Record<string, number>;
+    const memoryUsageMb = (memStats.usage ?? 0) / (1024 * 1024);
+    const memoryLimitMb = (memStats.limit ?? 0) / (1024 * 1024);
+
+    // Parse Network
+    const networks = stats.networks as Record<string, Record<string, number>> | undefined;
+    let rxBytes = 0;
+    let txBytes = 0;
+    if (networks) {
+      for (const iface of Object.values(networks)) {
+        rxBytes += iface.rx_bytes ?? 0;
+        txBytes += iface.tx_bytes ?? 0;
+      }
+    }
+
+    return {
+      cpu_percent: Math.round(cpuPercent * 100) / 100,
+      memory_usage_mb: Math.round(memoryUsageMb),
+      memory_limit_mb: Math.round(memoryLimitMb),
+      network_rx_mb: Math.round((rxBytes / (1024 * 1024)) * 100) / 100,
+      network_tx_mb: Math.round((txBytes / (1024 * 1024)) * 100) / 100,
+    };
+  }
+
+  async getAudioHealth(agentId: string) {
+    const agent = await this.api.getAgentById(agentId);
+    if (!agent) throw new Error('Agent not found');
+
+    const pulseEnv = [
+      'PULSE_RUNTIME_PATH=/tmp/pulse',
+      'XDG_RUNTIME_DIR=/tmp/pulse',
+    ];
+
+    // Check if PulseAudio is running
+    const paCheck = await this.execInContainer(
+      agent.container_id,
+      ['sh', '-c', 'pulseaudio --check 2>/dev/null && echo "PA_OK" || echo "PA_DEAD"'],
+      pulseEnv,
+    );
+    const paRunning = paCheck.includes('PA_OK');
+
+    const safeExec = async (args: string[]) => {
+      if (!paRunning) return '';
+      try {
+        const output = await this.execInContainer(agent.container_id, args, pulseEnv);
+        if (output.includes('Connection refused') || output.includes('Connection failure')) {
+          return '';
+        }
+        return output;
+      } catch {
+        return '';
+      }
+    };
+
+    const [sinks, sources, sinkInputs, sourceOutputs] = await Promise.all([
+      safeExec(['pactl', 'list', 'short', 'sinks']),
+      safeExec(['pactl', 'list', 'short', 'sources']),
+      safeExec(['pactl', 'list', 'short', 'sink-inputs']),
+      safeExec(['pactl', 'list', 'short', 'source-outputs']),
+    ]);
+
+    const parseLines = (raw: string) => {
+      if (!raw.trim()) return [];
+      return raw.trim().split('\n').filter(Boolean).map((line) => {
+        const parts = line.split('\t');
+        return { id: parts[0], name: parts[1], module: parts[2], state: parts[parts.length - 1] };
+      });
+    };
+
+    return {
+      pulseaudio_running: paRunning,
+      sinks: parseLines(sinks),
+      sources: parseLines(sources),
+      sink_inputs: parseLines(sinkInputs),
+      source_outputs: parseLines(sourceOutputs),
+    };
   }
 
   private async destroyContainer(containerId: string) {

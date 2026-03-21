@@ -14,3 +14,9 @@ export async function loadPoolData() {
 
   return { agents, counts };
 }
+
+export async function loadAgentDetail(agentId: string) {
+  const client = createServiceRoleClient();
+  const api = createPoolApi(client);
+  return api.getAgentWithSession(agentId);
+}

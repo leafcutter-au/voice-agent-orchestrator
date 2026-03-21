@@ -1,10 +1,14 @@
 'use client';
 
+import { useTransition } from 'react';
+import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
+import { Square, Trash2 } from 'lucide-react';
 import { AgentStatusBadge } from './agent-status-badge';
 import { PoolControls } from './pool-controls';
 import { useRealtimeTable } from '@/hooks/use-realtime';
 import { usePoolData } from '@/hooks/use-pool-data';
+import { destroyAgentAction, stopAgentAction } from '../server-actions';
 import type { Database } from '@/lib/supabase/database.types';
 
 type PoolAgent = Database['public']['Tables']['pool_agents']['Row'];
@@ -121,41 +125,17 @@ export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps
               <th className="px-4 py-2 text-left font-medium">Session</th>
               <th className="px-4 py-2 text-left font-medium">Uptime</th>
               <th className="px-4 py-2 text-left font-medium">Last Health</th>
+              <th className="px-4 py-2 text-left font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-border divide-y">
             {agents.map((agent) => (
-              <tr key={agent.id} className="hover:bg-muted/30">
-                <td className="px-4 py-2">
-                  <div className="text-sm font-medium">
-                    {agent.container_name ?? agent.container_id.substring(0, 12)}
-                  </div>
-                </td>
-                <td className="px-4 py-2">
-                  <AgentStatusBadge status={agent.status} />
-                </td>
-                <td className="px-4 py-2 text-xs">{agent.internal_ip ?? '-'}</td>
-                <td className="px-4 py-2 font-mono text-xs">
-                  {agent.session_id?.substring(0, 8) ?? '-'}
-                </td>
-                <td className="text-muted-foreground px-4 py-2 text-xs">
-                  {formatDistanceToNow(new Date(agent.started_at), {
-                    addSuffix: false,
-                  })}
-                </td>
-                <td className="text-muted-foreground px-4 py-2 text-xs">
-                  {agent.last_health_check
-                    ? formatDistanceToNow(new Date(agent.last_health_check), {
-                        addSuffix: true,
-                      })
-                    : '-'}
-                </td>
-              </tr>
+              <AgentTableRow key={agent.id} agent={agent} />
             ))}
             {agents.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="text-muted-foreground px-4 py-8 text-center"
                 >
                   No agents in pool
@@ -166,5 +146,73 @@ export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps
         </table>
       </div>
     </div>
+  );
+}
+
+function AgentTableRow({ agent }: { agent: PoolAgent }) {
+  const [isPending, startTransition] = useTransition();
+  const canStop = agent.status === 'interviewing' || agent.status === 'in_meeting';
+
+  const handleStop = () => {
+    startTransition(async () => {
+      await stopAgentAction({ agentId: agent.id });
+    });
+  };
+
+  const handleDelete = () => {
+    if (!window.confirm(`Delete agent ${agent.container_name ?? agent.id}? This cannot be undone.`)) return;
+    startTransition(async () => {
+      await destroyAgentAction({ agentId: agent.id });
+    });
+  };
+
+  return (
+    <tr className="hover:bg-muted/30">
+      <td className="px-4 py-2">
+        <Link
+          href={`/home/pool/${agent.id}`}
+          className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          {agent.container_name ?? agent.container_id.substring(0, 12)}
+        </Link>
+      </td>
+      <td className="px-4 py-2">
+        <AgentStatusBadge status={agent.status} />
+      </td>
+      <td className="px-4 py-2 text-xs">{agent.internal_ip ?? '-'}</td>
+      <td className="px-4 py-2 font-mono text-xs">
+        {agent.session_id?.substring(0, 8) ?? '-'}
+      </td>
+      <td className="text-muted-foreground px-4 py-2 text-xs">
+        {formatDistanceToNow(new Date(agent.started_at), { addSuffix: false })}
+      </td>
+      <td className="text-muted-foreground px-4 py-2 text-xs">
+        {agent.last_health_check
+          ? formatDistanceToNow(new Date(agent.last_health_check), { addSuffix: true })
+          : '-'}
+      </td>
+      <td className="px-4 py-2">
+        <div className="flex items-center gap-1">
+          {canStop && (
+            <button
+              onClick={handleStop}
+              disabled={isPending}
+              className="rounded p-1 text-orange-600 hover:bg-orange-100 disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
+              title="Stop interview"
+            >
+              <Square className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={handleDelete}
+            disabled={isPending}
+            className="rounded p-1 text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-900/30"
+            title="Delete agent"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

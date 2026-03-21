@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { enhanceAction } from '@/lib/actions/enhance-action';
 import { createPoolService } from './pool.service';
-import { ScaleUpSchema, ScaleDownSchema, DestroyAgentSchema } from './pool.schema';
+import { ScaleUpSchema, ScaleDownSchema, DestroyAgentSchema, StopAgentSchema } from './pool.schema';
 
 export const scaleUpAction = enhanceAction(
   async (data: { count: number }) => {
@@ -34,4 +34,15 @@ export const destroyAgentAction = enhanceAction(
     return { success: true };
   },
   { auth: true, schema: DestroyAgentSchema },
+);
+
+export const stopAgentAction = enhanceAction(
+  async (data: { agentId: string }) => {
+    const service = createPoolService();
+    await service.stopAgent(data.agentId);
+    revalidatePath(`/home/pool/${data.agentId}`);
+    revalidatePath('/home/pool');
+    return { success: true };
+  },
+  { auth: true, schema: StopAgentSchema },
 );

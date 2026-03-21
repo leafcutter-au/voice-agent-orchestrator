@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/supabase/database.types';
+import type { Database, Json } from '@/lib/supabase/database.types';
 
 type Client = SupabaseClient<Database>;
 type AgentRow = Database['public']['Tables']['pool_agents']['Row'];
@@ -111,5 +111,48 @@ class PoolApi {
       .returns<AgentRow[]>();
     if (error) throw error;
     return data;
+  }
+
+  async getAgentWithSession(agentId: string) {
+    const { data: agent, error: agentError } = await this.client
+      .from('pool_agents')
+      .select('*')
+      .eq('id', agentId)
+      .returns<AgentRow[]>()
+      .single();
+    if (agentError) throw agentError;
+
+    type SessionRow = Database['public']['Tables']['voice_sessions']['Row'];
+    let session: SessionRow | null = null;
+    if (agent.session_id) {
+      const { data, error } = await this.client
+        .from('voice_sessions')
+        .select('*')
+        .eq('id', agent.session_id)
+        .returns<SessionRow[]>()
+        .single();
+      if (!error && data) session = data;
+    }
+
+    return { agent, session };
+  }
+
+  async cancelSession(sessionId: string) {
+    const { error } = await this.client
+      .from('voice_sessions')
+      .update({
+        status: 'cancelled' as Database['public']['Tables']['voice_sessions']['Row']['status'],
+        ended_at: new Date().toISOString(),
+      })
+      .eq('id', sessionId)
+      .in('status', ['pending', 'connecting', 'active']);
+    if (error) throw error;
+  }
+
+  async insertSessionEvent(sessionId: string, eventType: string, eventData: Record<string, Json | undefined> = {}) {
+    const { error } = await this.client
+      .from('session_events')
+      .insert({ session_id: sessionId, event_type: eventType, event_data: eventData as Json });
+    if (error) throw error;
   }
 }
