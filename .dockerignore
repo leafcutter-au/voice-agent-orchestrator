@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.agent.example
+e2e
+test-results
+supabase/.temp

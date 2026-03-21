@@ -14,15 +14,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  try {
-    const service = createPoolService();
-    await service.reconcilePool();
-    return NextResponse.json({ success: true });
-  } catch (e) {
-    getLogger().error({ error: e }, 'Manual reconciliation failed');
-    return NextResponse.json(
-      { error: 'Reconciliation failed' },
-      { status: 500 },
-    );
-  }
+  // Fire-and-forget — reconciliation spawns containers which can take minutes.
+  // Return immediately so the caller isn't blocked.
+  const service = createPoolService();
+  service.reconcilePool().catch((e) =>
+    getLogger().error({ error: e }, 'Manual reconciliation failed'),
+  );
+  return NextResponse.json({ success: true, message: 'Reconciliation triggered' });
 }
