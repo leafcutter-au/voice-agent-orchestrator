@@ -87,6 +87,10 @@ Create a new interview session and assign a warm agent.
           "Decision authority",
           "Escalation paths",
           "Stakeholder engagement"
+        ],
+        "guiding_questions": [
+          "How are key project decisions made and by whom?",
+          "What happens when a decision is escalated?"
         ]
       }
     ]
@@ -112,6 +116,7 @@ Create a new interview session and assign a warm agent.
 | `interview_config.interview_framework[].max_time_mins` | number | Yes | Maximum time before moving on |
 | `interview_config.interview_framework[].priority` | integer | Yes | Priority order (1 = highest) |
 | `interview_config.interview_framework[].sub_topics` | string[] | Yes | Specific areas to probe (min 1) |
+| `interview_config.interview_framework[].guiding_questions` | string[] | No | Specific questions the plan author wants answered during this topic. The agent weaves these into the conversation naturally alongside sub-topic exploration. When omitted, the agent explores sub-topics with self-generated questions. |
 | `callback_url` | string (URL) | No | URL to receive results when interview completes. Defaults to orchestrator's own webhook. |
 
 **Response (200):**
@@ -235,11 +240,31 @@ Discovery does not call this endpoint — the orchestrator calls it internally. 
   "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "status": "completed",
   "results": {
-    "summary": "...",
-    "findings": [...],
-    "recommendations": [...],
-    "topics_covered": [...],
-    "duration_seconds": 1725
+    "sessionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "stakeholder": {
+      "name": "Jane Doe",
+      "role": "Project Manager"
+    },
+    "startTime": "2026-03-24T10:00:00.000Z",
+    "endTime": "2026-03-24T10:28:45.000Z",
+    "total_duration_mins": 28.8,
+    "findings_summary": { "...": "..." },
+    "transcript": [
+      {
+        "turn": 1,
+        "timestamp": "2026-03-24T10:00:12.340Z",
+        "speaker": "interviewer",
+        "speaker_name": "Claudia",
+        "text": "Good morning Jane, thank you for taking the time..."
+      },
+      {
+        "turn": 2,
+        "timestamp": "2026-03-24T10:00:38.120Z",
+        "speaker": "interviewee",
+        "speaker_name": "Jane Doe",
+        "text": "Yeah sure, happy to help."
+      }
+    ]
   }
 }
 ```
@@ -249,6 +274,8 @@ Discovery does not call this endpoint — the orchestrator calls it internally. 
 | `session_id` | string (UUID) | The session that completed |
 | `status` | `"completed"` or `"failed"` | Outcome |
 | `results` | object | Interview findings (only on completed). Schema is defined by the agent's report generator. |
+| `results.findings_summary` | object | Per-topic structured findings with status, summary, and sub-topic coverage |
+| `results.transcript` | array | Timestamped conversation transcript with speaker labels. Each entry has `turn` (int), `timestamp` (ISO 8601), `speaker` (`"interviewer"` or `"interviewee"`), `speaker_name` (string), and `text` (string). |
 
 Discovery should implement a webhook endpoint to receive this callback.
 

@@ -18,6 +18,7 @@ const InterviewTopicSchema = z.object({
   max_time_mins: z.number().positive(),
   priority: z.number().int().positive(),
   sub_topics: z.array(z.string()).min(1),
+  guiding_questions: z.array(z.string()).optional(),
 });
 
 export const CreateSessionSchema = z.object({
