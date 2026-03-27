@@ -7,7 +7,7 @@ services:
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     container_name: paia-orchestrator
     ports:
-      - "3000:3000"
+      - "3100:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -19,10 +19,11 @@ services:
       - POOL_MIN_WARM=${POOL_MIN_WARM:-2}
       - POOL_WARM_RATIO=${POOL_WARM_RATIO:-0.3}
       - POOL_BUFFER=${POOL_BUFFER:-1}
-      - POOL_MAX_IDLE_MINS=${POOL_MAX_IDLE_MINS:-30}
+      - POOL_MAX_IDLE_MINS=${POOL_MAX_IDLE_MINS:-0}
       - POOL_IMAGE=${POOL_IMAGE:-paia-local-audio:latest}
       - POOL_NETWORK=paia-network
       - POOL_ENV_FILE=/etc/paia/agent.env
+      - INTERNAL_ORIGIN=http://paia-orchestrator:3000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${AGENT_ENV_FILE:-.env.agent}:/etc/paia/agent.env:ro

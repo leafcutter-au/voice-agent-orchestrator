@@ -231,22 +231,24 @@ class PoolService {
       }
     }
 
-    // Replace stale warm agents
-    const maxIdleMs = POOL_CONFIG.MAX_IDLE_MINS * 60 * 1000;
-    const staleAgents = agents.filter(
-      (a) =>
-        a.status === 'warm' &&
-        Date.now() - new Date(a.started_at).getTime() > maxIdleMs,
-    );
-    for (const agent of staleAgents) {
-      logger.info(
-        { ...ctx, agentId: agent.id },
-        'Replacing stale warm agent',
+    // Replace stale warm agents (disabled when MAX_IDLE_MINS <= 0)
+    if (POOL_CONFIG.MAX_IDLE_MINS > 0) {
+      const maxIdleMs = POOL_CONFIG.MAX_IDLE_MINS * 60 * 1000;
+      const staleAgents = agents.filter(
+        (a) =>
+          a.status === 'warm' &&
+          Date.now() - new Date(a.started_at).getTime() > maxIdleMs,
       );
-      await this.destroyAgent(agent.id);
-      await this.spawnAgent().catch((e) =>
-        logger.error({ ...ctx, error: e }, 'Failed to replace stale agent'),
-      );
+      for (const agent of staleAgents) {
+        logger.info(
+          { ...ctx, agentId: agent.id },
+          'Replacing stale warm agent',
+        );
+        await this.destroyAgent(agent.id);
+        await this.spawnAgent().catch((e) =>
+          logger.error({ ...ctx, error: e }, 'Failed to replace stale agent'),
+        );
+      }
     }
   }
 
@@ -335,8 +337,12 @@ class PoolService {
       }
     }
 
-    await this.destroyContainer(agent.container_id);
+    // Delete DB record first so health checks stop targeting this agent,
+    // then destroy the container. Prevents the race condition where
+    // healthCheck() finds a DB record with status='warm' but the container
+    // is already gone, and marks it as 'failed'.
     await this.api.deleteAgent(agentId);
+    await this.destroyContainer(agent.container_id);
   }
 
   async scaleUp(count: number) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useCallback, useTransition } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { Square, Trash2 } from 'lucide-react';
@@ -45,6 +45,49 @@ export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps
     (counts['joining'] ?? 0) +
     (counts['in_meeting'] ?? 0) +
     (counts['interviewing'] ?? 0);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, startBulkTransition] = useTransition();
+
+  // Clear selection for agents that no longer exist
+  const agentIds = new Set(agents.map((a) => a.id));
+  const validSelected = new Set([...selected].filter((id) => agentIds.has(id)));
+  if (validSelected.size !== selected.size && selected.size > 0) {
+    setSelected(validSelected);
+  }
+
+  const toggleOne = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelected((prev) =>
+      prev.size === agents.length
+        ? new Set()
+        : new Set(agents.map((a) => a.id)),
+    );
+  }, [agents]);
+
+  const handleBulkDelete = () => {
+    if (selected.size === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selected.size} agent${selected.size > 1 ? 's' : ''}? This cannot be undone.`,
+      )
+    )
+      return;
+    startBulkTransition(async () => {
+      await Promise.allSettled(
+        [...selected].map((id) => destroyAgentAction({ agentId: id })),
+      );
+      setSelected(new Set());
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -114,11 +157,45 @@ export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps
 
       <PoolControls />
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 dark:border-red-900 dark:bg-red-950/40">
+          <span className="text-sm font-medium">
+            {selected.size} selected
+          </span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={isBulkDeleting}
+            className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {isBulkDeleting ? 'Deleting...' : `Delete ${selected.size}`}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-muted-foreground text-xs hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Agent grid */}
       <div className="border-border overflow-hidden rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
+              <th className="w-10 px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={agents.length > 0 && selected.size === agents.length}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selected.size > 0 && selected.size < agents.length;
+                  }}
+                  onChange={toggleAll}
+                  className="accent-red-600"
+                />
+              </th>
               <th className="px-4 py-2 text-left font-medium">Agent</th>
               <th className="px-4 py-2 text-left font-medium">Status</th>
               <th className="px-4 py-2 text-left font-medium">IP</th>
@@ -130,12 +207,17 @@ export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps
           </thead>
           <tbody className="divide-border divide-y">
             {agents.map((agent) => (
-              <AgentTableRow key={agent.id} agent={agent} />
+              <AgentTableRow
+                key={agent.id}
+                agent={agent}
+                isSelected={selected.has(agent.id)}
+                onToggle={toggleOne}
+              />
             ))}
             {agents.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="text-muted-foreground px-4 py-8 text-center"
                 >
                   No agents in pool
@@ -149,7 +231,15 @@ export function PoolOverview({ initialAgents, initialCounts }: PoolOverviewProps
   );
 }
 
-function AgentTableRow({ agent }: { agent: PoolAgent }) {
+function AgentTableRow({
+  agent,
+  isSelected,
+  onToggle,
+}: {
+  agent: PoolAgent;
+  isSelected: boolean;
+  onToggle: (id: string) => void;
+}) {
   const [isPending, startTransition] = useTransition();
   const canStop = agent.status === 'interviewing' || agent.status === 'in_meeting';
 
@@ -167,7 +257,15 @@ function AgentTableRow({ agent }: { agent: PoolAgent }) {
   };
 
   return (
-    <tr className="hover:bg-muted/30">
+    <tr className={`hover:bg-muted/30 ${isSelected ? 'bg-red-50/50 dark:bg-red-950/20' : ''}`}>
+      <td className="px-3 py-2">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggle(agent.id)}
+          className="accent-red-600"
+        />
+      </td>
       <td className="px-4 py-2">
         <Link
           href={`/home/pool/${agent.id}`}

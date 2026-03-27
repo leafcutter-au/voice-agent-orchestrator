@@ -93,7 +93,14 @@ Create a new interview session and assign a warm agent.
           "What happens when a decision is escalated?"
         ]
       }
-    ]
+    ],
+    "bot_identity": {
+      "persona_name": "Claudia"
+    },
+    "review_context": {
+      "review_type": "project assurance review",
+      "project_name": "ERP Replacement Programme"
+    }
   },
   "callback_url": "https://discovery.example.com/api/webhooks/voice-agent"
 }
@@ -117,6 +124,11 @@ Create a new interview session and assign a warm agent.
 | `interview_config.interview_framework[].priority` | integer | Yes | Priority order (1 = highest) |
 | `interview_config.interview_framework[].sub_topics` | string[] | Yes | Specific areas to probe (min 1) |
 | `interview_config.interview_framework[].guiding_questions` | string[] | No | Specific questions the plan author wants answered during this topic. The agent weaves these into the conversation naturally alongside sub-topic exploration. When omitted, the agent explores sub-topics with self-generated questions. |
+| `interview_config.bot_identity` | object | No | Agent verbal identity settings. If omitted, defaults apply. |
+| `interview_config.bot_identity.persona_name` | string | Yes (if `bot_identity` provided) | Name the agent uses to introduce itself verbally (default: "Claudia") |
+| `interview_config.review_context` | object | No | Review framing settings. If omitted, defaults apply. |
+| `interview_config.review_context.review_type` | string | Yes (if `review_context` provided) | Type of engagement — e.g. "stage gate review", "health check" (default: "project assurance review") |
+| `interview_config.review_context.project_name` | string or null | Yes (if `review_context` provided) | Project/programme name. If null or omitted, no project name is mentioned in the interview. |
 | `callback_url` | string (URL) | No | URL to receive results when interview completes. Defaults to orchestrator's own webhook. |
 
 **Response (200):**

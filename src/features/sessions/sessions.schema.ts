@@ -32,7 +32,15 @@ export const CreateSessionSchema = z.object({
     interview_settings: z.object({
       total_max_time_mins: z.number().positive(),
       conclusion_buffer_mins: z.number().positive(),
+      silence_timeout_secs: z.number().int().min(0).optional(),
     }),
+    bot_identity: z.object({
+      persona_name: z.string(),
+    }).optional(),
+    review_context: z.object({
+      review_type: z.string(),
+      project_name: z.string().nullable(),
+    }).optional(),
   }),
   callback_url: z.string().url().optional(),
 });

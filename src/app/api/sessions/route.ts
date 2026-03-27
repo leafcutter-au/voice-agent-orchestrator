@@ -39,7 +39,9 @@ export async function POST(request: NextRequest) {
 
     // Assign a warm agent
     const poolService = createPoolService();
-    const callbackUrl = `${request.nextUrl.origin}/api/webhooks/voice-agent`;
+    // Use Docker network hostname so agent containers can reach us
+    const internalOrigin = process.env.INTERNAL_ORIGIN ?? request.nextUrl.origin;
+    const callbackUrl = `${internalOrigin}/api/webhooks/voice-agent`;
 
     const agentId = await poolService.assignAgent({
       sessionId: session.id,
