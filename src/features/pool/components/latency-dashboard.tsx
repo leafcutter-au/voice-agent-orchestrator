@@ -48,15 +48,15 @@ export function LatencyDashboard({ agentId, isActive }: LatencyDashboardProps) {
     );
   }
 
-  const turnEvents = events.filter((e) => e.type === 'turn' && e.turn != null);
-  const summaryEvent = events.find((e) => e.type === 'summary');
+  const turnEvents = events.filter((e) => e.event === 'turn_breakdown' && e.turn != null);
+  const summaryEvent = events.find((e) => e.event === 'summary');
 
   const chartData = turnEvents.map((e) => ({
     turn: e.turn,
     STT: e.stt_ms ?? 0,
     'LLM TTFT': e.llm_ttft_ms ?? 0,
-    'LLM Gen': e.llm_gen_ms ?? 0,
-    TTS: e.tts_ms ?? 0,
+    'LLM Gen': e.llm_generation_ms ?? 0,
+    TTS: e.tts_to_audio_ms ?? 0,
     Total: e.total_ms ?? 0,
   }));
 
@@ -117,14 +117,17 @@ export function LatencyDashboard({ agentId, isActive }: LatencyDashboardProps) {
 }
 
 function SummaryTable({ summary }: { summary: LatencyEvent }) {
-  const metrics = ['stt', 'llm_ttft', 'llm_gen', 'tts', 'total'] as const;
+  // The tracker writes per-metric objects: { stt_ms: { p50, p95, mean, ... }, ... }
+  const metrics = ['stt_ms', 'llm_ttft_ms', 'llm_generation_ms', 'tts_to_audio_ms', 'total_ms'] as const;
   const labels: Record<string, string> = {
-    stt: 'STT',
-    llm_ttft: 'LLM TTFT',
-    llm_gen: 'LLM Gen',
-    tts: 'TTS',
-    total: 'Total',
+    stt_ms: 'STT',
+    llm_ttft_ms: 'LLM TTFT',
+    llm_generation_ms: 'LLM Gen',
+    tts_to_audio_ms: 'TTS',
+    total_ms: 'Total',
   };
+
+  type MetricStats = { p50?: number; p95?: number; mean?: number };
 
   return (
     <table className="w-full text-sm">
@@ -137,20 +140,23 @@ function SummaryTable({ summary }: { summary: LatencyEvent }) {
         </tr>
       </thead>
       <tbody className="divide-border divide-y">
-        {metrics.map((m) => (
-          <tr key={m}>
-            <td className="px-4 py-2">{labels[m]}</td>
-            <td className="px-4 py-2 text-right font-mono text-xs">
-              {summary.p50?.[m] ?? '-'}
-            </td>
-            <td className="px-4 py-2 text-right font-mono text-xs">
-              {summary.p95?.[m] ?? '-'}
-            </td>
-            <td className="px-4 py-2 text-right font-mono text-xs">
-              {summary.mean?.[m] ?? '-'}
-            </td>
-          </tr>
-        ))}
+        {metrics.map((m) => {
+          const stats = summary[m] as MetricStats | undefined;
+          return (
+            <tr key={m}>
+              <td className="px-4 py-2">{labels[m]}</td>
+              <td className="px-4 py-2 text-right font-mono text-xs">
+                {stats?.p50 ?? '-'}
+              </td>
+              <td className="px-4 py-2 text-right font-mono text-xs">
+                {stats?.p95 ?? '-'}
+              </td>
+              <td className="px-4 py-2 text-right font-mono text-xs">
+                {stats?.mean ?? '-'}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

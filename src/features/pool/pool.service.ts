@@ -283,6 +283,23 @@ class PoolService {
             status: agentStatus as typeof agent.status,
           });
 
+          // When agent reaches in_meeting, promote linked session to 'active'
+          if (
+            agentStatus === 'in_meeting' &&
+            agent.session_id &&
+            agent.status !== 'in_meeting'
+          ) {
+            try {
+              await this.api.activateSession(agent.session_id);
+              await this.api.insertSessionEvent(agent.session_id, 'meeting_joined');
+            } catch (e) {
+              logger.warn(
+                { namespace: this.namespace, agentId: agent.id, sessionId: agent.session_id, error: e },
+                'Failed to activate session',
+              );
+            }
+          }
+
           if (agentStatus === 'draining') {
             setTimeout(() => this.destroyAgent(agent.id).catch(() => {}), 30000);
           }

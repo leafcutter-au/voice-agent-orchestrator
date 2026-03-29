@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import type { Database } from '@/lib/supabase/database.types';
 import { AgentStatusBadge } from './agent-status-badge';
+import { getAgentAction } from '../server-actions';
 import { AgentActions } from './agent-actions';
 import { ContainerLogs } from './container-logs';
 import { AgentTopicProgress } from './agent-topic-progress';
@@ -32,8 +34,20 @@ const tabs = [
 
 type TabId = (typeof tabs)[number]['id'];
 
-export function AgentDetail({ agent, session }: AgentDetailProps) {
+export function AgentDetail({ agent: initialAgent, session }: AgentDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+
+  const { data: liveAgent } = useQuery({
+    queryKey: ['agent-detail', initialAgent.id],
+    queryFn: async () => {
+      const result = await getAgentAction({ agentId: initialAgent.id });
+      return result?.agent ?? null;
+    },
+    refetchInterval: 10_000,
+    initialData: initialAgent,
+  });
+
+  const agent = liveAgent ?? initialAgent;
   const agentName = agent.container_name ?? agent.container_id.substring(0, 12);
 
   const isActive = ['assigned', 'joining', 'in_meeting', 'interviewing'].includes(agent.status);

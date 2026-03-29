@@ -137,6 +137,17 @@ class PoolApi {
     return { agent, session };
   }
 
+  async activateSession(sessionId: string) {
+    const { error } = await this.client
+      .from('voice_sessions')
+      .update({
+        status: 'active' as Database['public']['Tables']['voice_sessions']['Row']['status'],
+      })
+      .eq('id', sessionId)
+      .eq('status', 'connecting');
+    if (error) throw error;
+  }
+
   async cancelSession(sessionId: string) {
     const { error } = await this.client
       .from('voice_sessions')

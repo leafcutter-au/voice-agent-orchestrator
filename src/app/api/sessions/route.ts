@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       meetingUrl: parsed.data.meeting_url,
       botName: 'PAIA',
       interviewConfig: parsed.data.interview_config,
-      callbackUrl: parsed.data.callback_url ?? callbackUrl,
+      callbackUrl,
     });
 
     if (!agentId) {

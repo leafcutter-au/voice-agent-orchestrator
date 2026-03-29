@@ -96,7 +96,7 @@ class SessionsService {
     }
 
     // Forward results to Discovery callback if configured
-    if (session.callback_url && input.results) {
+    if (session.callback_url) {
       try {
         await fetch(session.callback_url, {
           method: 'POST',
@@ -104,7 +104,8 @@ class SessionsService {
           body: JSON.stringify({
             session_id: input.session_id,
             status: input.status,
-            results: input.results,
+            ...(input.results && { results: input.results }),
+            ...(input.error && { error: input.error }),
           }),
           signal: AbortSignal.timeout(10000),
         });

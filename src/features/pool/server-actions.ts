@@ -36,6 +36,15 @@ export const destroyAgentAction = enhanceAction(
   { auth: true, schema: DestroyAgentSchema },
 );
 
+export const getAgentAction = enhanceAction(
+  async (data: { agentId: string }) => {
+    const service = createPoolService();
+    const { agent } = await service.getAgentWithSession(data.agentId);
+    return { success: true, agent };
+  },
+  { auth: true, schema: DestroyAgentSchema },
+);
+
 export const stopAgentAction = enhanceAction(
   async (data: { agentId: string }) => {
     const service = createPoolService();

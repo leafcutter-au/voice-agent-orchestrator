@@ -3,17 +3,21 @@
 import { useQuery } from '@tanstack/react-query';
 
 export interface LatencyEvent {
-  type: string;
+  event: string;
+  ts: number;
   turn?: number;
+  // Turn breakdown fields (event: "turn_breakdown")
   stt_ms?: number;
   llm_ttft_ms?: number;
-  llm_gen_ms?: number;
-  tts_ms?: number;
+  llm_generation_ms?: number;
+  tts_to_audio_ms?: number;
+  func_call_ms?: number;
+  func_call_count?: number;
   total_ms?: number;
-  // Summary fields
-  p50?: Record<string, number>;
-  p95?: Record<string, number>;
-  mean?: Record<string, number>;
+  // Summary fields (event: "summary")
+  total_turns?: number;
+  measured_responses?: number;
+  interruptions?: number;
   [key: string]: unknown;
 }
 
