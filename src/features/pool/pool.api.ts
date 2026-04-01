@@ -137,6 +137,17 @@ class PoolApi {
     return { agent, session };
   }
 
+  async saveSessionDiagnostics(
+    sessionId: string,
+    diagnostics: { pipecat_logs?: string; latency_data?: Json },
+  ) {
+    const { error } = await this.client
+      .from('voice_sessions')
+      .update(diagnostics)
+      .eq('id', sessionId);
+    if (error) throw error;
+  }
+
   async activateSession(sessionId: string) {
     const { error } = await this.client
       .from('voice_sessions')

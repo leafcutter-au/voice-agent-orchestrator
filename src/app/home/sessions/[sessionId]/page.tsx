@@ -14,8 +14,8 @@ export default async function SessionDetailPage({
   const { sessionId } = await params;
 
   try {
-    const { session, events } = await loadSessionDetail(sessionId);
-    return <SessionDetail session={session} events={events} />;
+    const { session } = await loadSessionDetail(sessionId);
+    return <SessionDetail session={session} />;
   } catch {
     notFound();
   }

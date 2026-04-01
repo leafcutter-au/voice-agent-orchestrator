@@ -1,31 +1,43 @@
 'use client';
 
 import { useTransition } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { format, formatDistanceToNow } from 'date-fns';
+import { Trash2 } from 'lucide-react';
 import { SessionStatusBadge } from './session-status-badge';
-import { SessionEvents } from './session-events';
-import { TopicProgress } from './topic-progress';
-import { stopSessionAction, cancelSessionAction } from '../server-actions';
+import { FindingsSummary } from './findings-summary';
+import { Transcript } from './transcript';
+import { SessionDiagnostics } from './session-diagnostics';
+import { stopSessionAction, cancelSessionAction, deleteSessionAction } from '../server-actions';
 import { useRealtimeTable } from '@/hooks/use-realtime';
-import type { Database, Json } from '@/lib/supabase/database.types';
+import { TopicProgress } from './topic-progress';
+import type { Database } from '@/lib/supabase/database.types';
 import type { SessionStatus } from '../sessions.schema';
 
 type Session = Database['public']['Tables']['voice_sessions']['Row'];
-type Event = Database['public']['Tables']['session_events']['Row'];
 
 interface SessionDetailProps {
   session: Session;
-  events: Event[];
 }
 
-export function SessionDetail({ session, events }: SessionDetailProps) {
+export function SessionDetail({ session }: SessionDetailProps) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   useRealtimeTable('voice_sessions', ['session', session.id], `id=eq.${session.id}`);
-  useRealtimeTable('session_events', ['session-events', session.id], `session_id=eq.${session.id}`);
 
   const isActive = ['pending', 'connecting', 'active'].includes(session.status);
   const isCompleted = session.status === 'completed';
+  const canDelete = ['completed', 'failed', 'cancelled'].includes(session.status);
+
+  const handleDelete = () => {
+    if (!window.confirm('Delete this session? All associated data will be permanently removed.')) return;
+    startTransition(async () => {
+      await deleteSessionAction({ sessionId: session.id });
+      router.push('/home/sessions');
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -75,6 +87,16 @@ export function SessionDetail({ session, events }: SessionDetailProps) {
               Cancel
             </button>
           )}
+          {canDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={isPending}
+              className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -103,7 +125,18 @@ export function SessionDetail({ session, events }: SessionDetailProps) {
                 : '-'
           }
         />
-        <InfoCard label="Agent" value={session.pool_agent_id?.substring(0, 8) ?? 'Unassigned'} />
+        {session.pool_agent_id ? (
+          <Link href={`/home/pool/${session.pool_agent_id}`} className="group">
+            <div className="border-border rounded-lg border p-3 group-hover:border-primary/50 transition-colors">
+              <div className="text-muted-foreground text-xs">Agent</div>
+              <div className="mt-1 text-sm font-medium text-primary">
+                {session.pool_agent_id.substring(0, 8)}
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <InfoCard label="Agent" value="Unassigned" />
+        )}
       </div>
 
       {/* Topic progress (for active sessions) */}
@@ -111,18 +144,23 @@ export function SessionDetail({ session, events }: SessionDetailProps) {
         <TopicProgress config={session.interview_config} />
       )}
 
-      {/* Results (for completed sessions) */}
+      {/* Findings (for completed sessions) */}
       {isCompleted && session.results && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Results</h2>
-          <pre className="bg-muted max-h-96 overflow-auto rounded-lg p-4 text-xs">
-            {JSON.stringify(session.results, null, 2)}
-          </pre>
-        </div>
+        <FindingsSummary results={session.results} />
       )}
 
-      {/* Event timeline */}
-      <SessionEvents events={events} />
+      {/* Transcript (for completed sessions) */}
+      {isCompleted && session.results && (
+        <Transcript results={session.results} />
+      )}
+
+      {/* Diagnostics (pipecat logs + latency data) */}
+      {isCompleted && (
+        <SessionDiagnostics
+          pipecatLogs={session.pipecat_logs}
+          latencyData={session.latency_data}
+        />
+      )}
     </div>
   );
 }

@@ -33,6 +33,7 @@ interface AssignPayload {
 
 class PoolService {
   private readonly namespace = 'pool-service';
+  private readonly drainingTimers = new Set<string>();
 
   constructor(private readonly api: typeof createPoolApi extends (...args: never[]) => infer R ? R : never) {}
 
@@ -231,6 +232,23 @@ class PoolService {
       }
     }
 
+    // Destroy agents stuck in draining for more than 5 minutes (safety net)
+    const MAX_DRAIN_MS = 5 * 60 * 1000;
+    const drainingAgents = agents.filter(
+      (a) =>
+        a.status === 'draining' &&
+        Date.now() - new Date(a.updated_at).getTime() > MAX_DRAIN_MS,
+    );
+    for (const agent of drainingAgents) {
+      logger.warn(
+        { ...ctx, agentId: agent.id },
+        'Agent stuck in draining — force destroying',
+      );
+      await this.destroyAgent(agent.id).catch((e) =>
+        logger.error({ ...ctx, agentId: agent.id, error: e }, 'Failed to force-destroy draining agent'),
+      );
+    }
+
     // Replace stale warm agents (disabled when MAX_IDLE_MINS <= 0)
     if (POOL_CONFIG.MAX_IDLE_MINS > 0) {
       const maxIdleMs = POOL_CONFIG.MAX_IDLE_MINS * 60 * 1000;
@@ -261,6 +279,7 @@ class PoolService {
       'joining',
       'in_meeting',
       'interviewing',
+      'draining',
     ]);
 
     for (const agent of agents) {
@@ -299,10 +318,22 @@ class PoolService {
               );
             }
           }
+        }
 
-          if (agentStatus === 'draining') {
-            setTimeout(() => this.destroyAgent(agent.id).catch(() => {}), 30000);
-          }
+        // Schedule destruction for draining agents (covers both fresh
+        // transitions detected above AND agents already marked draining
+        // by the session callback before the health check ran).
+        if ((agentStatus === 'draining' || agent.status === 'draining') && !this.drainingTimers.has(agent.id)) {
+          this.drainingTimers.add(agent.id);
+          setTimeout(() => {
+            this.drainingTimers.delete(agent.id);
+            this.destroyAgent(agent.id).catch((e) => {
+              logger.error(
+                { namespace: this.namespace, agentId: agent.id, error: e },
+                'Failed to destroy draining agent',
+              );
+            });
+          }, 30000);
         }
 
         await this.api.updateAgent(agent.id, {
@@ -354,12 +385,62 @@ class PoolService {
       }
     }
 
+    // Capture diagnostics from container before destruction
+    if (agent.session_id) {
+      await this.captureAgentDiagnostics(agent.container_id, agent.session_id).catch((e) =>
+        logger.warn(
+          { namespace: this.namespace, agentId, sessionId: agent.session_id, error: e },
+          'Failed to capture agent diagnostics',
+        ),
+      );
+    }
+
     // Delete DB record first so health checks stop targeting this agent,
     // then destroy the container. Prevents the race condition where
     // healthCheck() finds a DB record with status='warm' but the container
     // is already gone, and marks it as 'failed'.
     await this.api.deleteAgent(agentId);
     await this.destroyContainer(agent.container_id);
+  }
+
+  private async captureAgentDiagnostics(containerId: string, sessionId: string) {
+    const logger = getLogger();
+    const ctx = { namespace: this.namespace, containerId, sessionId };
+
+    const [logsRaw, latencyRaw] = await Promise.allSettled([
+      this.execInContainer(containerId, [
+        'sh', '-c', 'cat /pipecat/logs/pipecat_*.log 2>/dev/null | tail -2000',
+      ]),
+      this.execInContainer(containerId, [
+        'sh', '-c', 'cat /pipecat/logs/latency_*.jsonl 2>/dev/null',
+      ]),
+    ]);
+
+    // Strip null bytes — pipecat logs may contain \u0000 which PostgreSQL TEXT rejects
+    const pipecatLogs = logsRaw.status === 'fulfilled' && logsRaw.value.trim()
+      ? logsRaw.value.replace(/\0/g, '')
+      : undefined;
+
+    let latencyData: Record<string, unknown>[] | undefined;
+    if (latencyRaw.status === 'fulfilled' && latencyRaw.value.trim()) {
+      try {
+        latencyData = latencyRaw.value
+          .trim()
+          .split('\n')
+          .filter((l) => l.trim())
+          .map((l) => JSON.parse(l));
+      } catch {
+        logger.warn(ctx, 'Failed to parse latency data');
+      }
+    }
+
+    if (pipecatLogs || latencyData) {
+      await this.api.saveSessionDiagnostics(sessionId, {
+        ...(pipecatLogs && { pipecat_logs: pipecatLogs }),
+        ...(latencyData && { latency_data: latencyData as unknown as import('@/lib/supabase/database.types').Json }),
+      });
+      logger.info(ctx, 'Agent diagnostics captured');
+    }
   }
 
   async scaleUp(count: number) {

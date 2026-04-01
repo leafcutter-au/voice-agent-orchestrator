@@ -63,3 +63,7 @@ export const StopSessionSchema = z.object({
 export const CancelSessionSchema = z.object({
   sessionId: z.string().uuid(),
 });
+
+export const DeleteSessionSchema = z.object({
+  sessionId: z.string().uuid(),
+});

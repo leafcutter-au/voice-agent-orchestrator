@@ -84,6 +84,14 @@ class SessionsApi {
     return { data, count: count ?? 0 };
   }
 
+  async deleteSession(id: string) {
+    const { error } = await this.client
+      .from('voice_sessions')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  }
+
   async insertEvent(event: EventInsert): Promise<EventRow> {
     const { data, error } = await this.client
       .from('session_events')

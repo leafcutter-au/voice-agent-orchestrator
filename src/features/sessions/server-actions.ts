@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { enhanceAction } from '@/lib/actions/enhance-action';
 import { createSessionsService } from './sessions.service';
-import { StopSessionSchema, CancelSessionSchema } from './sessions.schema';
+import { StopSessionSchema, CancelSessionSchema, DeleteSessionSchema } from './sessions.schema';
 
 export const stopSessionAction = enhanceAction(
   async (data: { sessionId: string }) => {
@@ -23,4 +23,14 @@ export const cancelSessionAction = enhanceAction(
     return { success: true };
   },
   { auth: true, schema: CancelSessionSchema },
+);
+
+export const deleteSessionAction = enhanceAction(
+  async (data: { sessionId: string }) => {
+    const service = createSessionsService();
+    await service.deleteSession(data.sessionId);
+    revalidatePath('/home/sessions');
+    return { success: true };
+  },
+  { auth: true, schema: DeleteSessionSchema },
 );

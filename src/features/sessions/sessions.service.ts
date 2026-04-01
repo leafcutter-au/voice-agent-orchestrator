@@ -179,6 +179,12 @@ class SessionsService {
     logger.info({ namespace: this.namespace, sessionId }, 'Stop requested');
   }
 
+  async deleteSession(sessionId: string) {
+    const logger = getLogger();
+    logger.info({ namespace: this.namespace, sessionId }, 'Deleting session');
+    await this.api.deleteSession(sessionId);
+  }
+
   async getSession(id: string) {
     return this.api.getSessionById(id);
   }
