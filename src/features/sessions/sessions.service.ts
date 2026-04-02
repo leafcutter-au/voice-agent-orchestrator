@@ -98,9 +98,17 @@ class SessionsService {
     // Forward results to Discovery callback if configured
     if (session.callback_url) {
       try {
-        await fetch(session.callback_url, {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        const callbackToken = process.env.CALLBACK_AUTH_TOKEN;
+        if (callbackToken) {
+          headers['Authorization'] = `Bearer ${callbackToken}`;
+        }
+
+        const resp = await fetch(session.callback_url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             session_id: input.session_id,
             status: input.status,
@@ -109,7 +117,15 @@ class SessionsService {
           }),
           signal: AbortSignal.timeout(10000),
         });
-        logger.info(ctx, 'Results forwarded to callback URL');
+
+        if (!resp.ok) {
+          logger.error(
+            { ...ctx, status: resp.status, statusText: resp.statusText },
+            'Callback URL returned error',
+          );
+        } else {
+          logger.info(ctx, 'Results forwarded to callback URL');
+        }
       } catch (e) {
         logger.error({ ...ctx, error: e }, 'Failed to forward results');
       }
