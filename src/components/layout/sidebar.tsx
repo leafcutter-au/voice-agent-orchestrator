@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Server, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Server, MessageSquare, FlaskConical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/home', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/home/pool', label: 'Agent Pool', icon: Server },
   { href: '/home/sessions', label: 'Sessions', icon: MessageSquare },
+  { href: '/home/testing', label: 'Testing', icon: FlaskConical },
 ];
 
 export function Sidebar() {

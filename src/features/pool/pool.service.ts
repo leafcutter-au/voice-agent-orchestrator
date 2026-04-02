@@ -3,6 +3,7 @@ import 'server-only';
 import { docker } from '@/lib/docker/client';
 import { getLogger } from '@/lib/logger';
 import { createServiceRoleClient } from '@/lib/supabase/admin';
+import { getTestModeState } from '@/features/testing/testing.state';
 import { createPoolApi } from './pool.api';
 
 const POOL_CONFIG = {
@@ -140,6 +141,11 @@ class PoolService {
     );
 
     // POST /assign to agent container
+    const testMode = getTestModeState();
+    if (testMode.enabled) {
+      logger.info(ctx, 'Test mode active — agent will run simulated interview');
+    }
+
     const assignUrl = `http://${agent.internal_ip}:${POOL_CONFIG.AGENT_PORT}/assign`;
     const resp = await fetch(assignUrl, {
       method: 'POST',
@@ -150,6 +156,10 @@ class PoolService {
         interview_config: payload.interviewConfig,
         callback_url: payload.callbackUrl,
         session_id: payload.sessionId,
+        ...(testMode.enabled && { test_mode: true }),
+        ...(testMode.enabled && testMode.intervieweeProfile && {
+          interviewee_profile: testMode.intervieweeProfile,
+        }),
       }),
       signal: AbortSignal.timeout(10000),
     });
