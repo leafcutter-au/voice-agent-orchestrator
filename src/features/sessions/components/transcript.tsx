@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
 import type { Json } from '@/lib/supabase/database.types';
 
 interface TranscriptEntry {
@@ -13,8 +12,47 @@ interface TranscriptEntry {
   text: string;
 }
 
+interface MergedBlock {
+  timestamp: string;
+  speaker: 'interviewer' | 'interviewee';
+  speaker_name: string;
+  text: string;
+}
+
 interface TranscriptProps {
   results: Json;
+}
+
+function mergeConsecutiveEntries(entries: TranscriptEntry[]): MergedBlock[] {
+  const blocks: MergedBlock[] = [];
+
+  for (const entry of entries) {
+    const prev = blocks[blocks.length - 1];
+    if (prev && prev.speaker === entry.speaker) {
+      prev.text += ' ' + entry.text;
+    } else {
+      blocks.push({
+        timestamp: entry.timestamp,
+        speaker: entry.speaker,
+        speaker_name: entry.speaker_name,
+        text: entry.text,
+      });
+    }
+  }
+
+  return blocks;
+}
+
+function formatRelativeTimestamp(ts: string, startTs: string): string {
+  try {
+    const diffMs = new Date(ts).getTime() - new Date(startTs).getTime();
+    const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  } catch {
+    return ts;
+  }
 }
 
 export function Transcript({ results }: TranscriptProps) {
@@ -26,6 +64,9 @@ export function Transcript({ results }: TranscriptProps) {
   const entries = r.transcript as TranscriptEntry[] | undefined;
   if (!entries || !Array.isArray(entries) || entries.length === 0) return null;
 
+  const blocks = mergeConsecutiveEntries(entries);
+  const startTs = entries[0].timestamp;
+
   return (
     <div className="space-y-3">
       <button
@@ -35,14 +76,14 @@ export function Transcript({ results }: TranscriptProps) {
         {expanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
         Transcript
         <span className="text-muted-foreground text-sm font-normal">
-          ({entries.length} turns)
+          ({blocks.length} exchanges)
         </span>
       </button>
 
       {expanded && (
-        <div className="space-y-3">
-          {entries.map((entry) => (
-            <TranscriptMessage key={entry.turn} entry={entry} />
+        <div className="border-l-2 border-muted">
+          {blocks.map((block, i) => (
+            <TranscriptRow key={i} block={block} startTs={startTs} />
           ))}
         </div>
       )}
@@ -50,36 +91,24 @@ export function Transcript({ results }: TranscriptProps) {
   );
 }
 
-function TranscriptMessage({ entry }: { entry: TranscriptEntry }) {
-  const isInterviewer = entry.speaker === 'interviewer';
+function TranscriptRow({ block, startTs }: { block: MergedBlock; startTs: string }) {
+  const isInterviewer = block.speaker === 'interviewer';
 
   return (
-    <div className={`flex ${isInterviewer ? 'justify-start' : 'justify-end'}`}>
-      <div
-        className={`max-w-[80%] rounded-lg px-4 py-3 ${
+    <div className="flex items-start gap-3 py-3 pl-4">
+      <span
+        className={`shrink-0 rounded px-2 py-0.5 text-xs font-mono ${
           isInterviewer
-            ? 'bg-muted'
-            : 'bg-primary/10 dark:bg-primary/20'
+            ? 'bg-foreground text-background'
+            : 'bg-muted text-foreground'
         }`}
       >
-        <div className="mb-1 flex items-center gap-2">
-          <span className="text-xs font-medium">
-            {entry.speaker_name}
-          </span>
-          <span className="text-muted-foreground text-xs">
-            {formatTimestamp(entry.timestamp)}
-          </span>
-        </div>
-        <p className="text-sm whitespace-pre-wrap">{entry.text}</p>
-      </div>
+        {formatRelativeTimestamp(block.timestamp, startTs)}
+      </span>
+      <span className="shrink-0 text-sm font-medium w-28">
+        {block.speaker_name}
+      </span>
+      <p className="text-sm whitespace-pre-wrap">{block.text}</p>
     </div>
   );
-}
-
-function formatTimestamp(ts: string): string {
-  try {
-    return format(new Date(ts), 'HH:mm:ss');
-  } catch {
-    return ts;
-  }
 }
