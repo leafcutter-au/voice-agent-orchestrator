@@ -123,12 +123,38 @@ class SessionsService {
             { ...ctx, status: resp.status, statusText: resp.statusText },
             'Callback URL returned error',
           );
+          await this.api.updateSession(input.session_id, { callback_status: 'failed' });
+          await this.api.insertEvent({
+            session_id: input.session_id,
+            event_type: 'callback_failed',
+            event_data: {
+              status: resp.status,
+              status_text: resp.statusText,
+              callback_url: session.callback_url,
+            },
+          });
         } else {
           logger.info(ctx, 'Results forwarded to callback URL');
+          await this.api.updateSession(input.session_id, { callback_status: 'sent' });
+          await this.api.insertEvent({
+            session_id: input.session_id,
+            event_type: 'callback_sent',
+          });
         }
       } catch (e) {
         logger.error({ ...ctx, error: e }, 'Failed to forward results');
+        await this.api.updateSession(input.session_id, { callback_status: 'failed' });
+        await this.api.insertEvent({
+          session_id: input.session_id,
+          event_type: 'callback_failed',
+          event_data: {
+            error: e instanceof Error ? e.message : String(e),
+            callback_url: session.callback_url,
+          },
+        });
       }
+    } else {
+      await this.api.updateSession(input.session_id, { callback_status: 'skipped' });
     }
 
     logger.info(ctx, 'Agent callback processed');

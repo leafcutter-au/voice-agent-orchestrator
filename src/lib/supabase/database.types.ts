@@ -84,6 +84,7 @@ export interface Database {
           stakeholder_name: string | null;
           stakeholder_role: string | null;
           callback_url: string | null;
+          callback_status: string;
           started_at: string | null;
           ended_at: string | null;
           duration_seconds: number | null;
@@ -108,6 +109,7 @@ export interface Database {
           stakeholder_name?: string | null;
           stakeholder_role?: string | null;
           callback_url?: string | null;
+          callback_status?: string;
           started_at?: string | null;
           ended_at?: string | null;
           duration_seconds?: number | null;
@@ -132,6 +134,7 @@ export interface Database {
           stakeholder_name?: string | null;
           stakeholder_role?: string | null;
           callback_url?: string | null;
+          callback_status?: string;
           started_at?: string | null;
           ended_at?: string | null;
           duration_seconds?: number | null;
