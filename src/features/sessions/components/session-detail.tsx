@@ -48,7 +48,7 @@ export function SessionDetail({ session }: SessionDetailProps) {
             <h1 className="text-xl font-bold">
               Session {session.id.substring(0, 8)}
             </h1>
-            <SessionStatusBadge status={session.status as SessionStatus} />
+            <SessionStatusBadge status={session.status as SessionStatus} failureReason={session.failure_reason} />
           </div>
           <div className="text-muted-foreground mt-1 text-sm">
             {session.stakeholder_name && (

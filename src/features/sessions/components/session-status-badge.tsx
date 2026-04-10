@@ -10,15 +10,35 @@ const statusStyles: Record<SessionStatus, string> = {
   cancelled: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
 };
 
-export function SessionStatusBadge({ status }: { status: SessionStatus }) {
+const failureReasonLabels: Record<string, string> = {
+  participant_no_show: 'Participant no-show',
+  meeting_join_failed: 'Meeting join failed',
+  pipeline_error: 'Pipeline error',
+  agent_error: 'Agent error',
+};
+
+export function SessionStatusBadge({
+  status,
+  failureReason,
+}: {
+  status: SessionStatus;
+  failureReason?: string | null;
+}) {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        statusStyles[status],
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+          statusStyles[status],
+        )}
+      >
+        {status}
+      </span>
+      {status === 'failed' && failureReason && failureReasonLabels[failureReason] && (
+        <span className="text-xs text-muted-foreground">
+          — {failureReasonLabels[failureReason]}
+        </span>
       )}
-    >
-      {status}
     </span>
   );
 }

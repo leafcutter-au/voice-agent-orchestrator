@@ -90,6 +90,7 @@ export interface Database {
           duration_seconds: number | null;
           results: Json | null;
           pipecat_logs: string | null;
+          failure_reason: string | null;
           latency_data: Json | null;
           created_at: string;
           updated_at: string;
@@ -115,6 +116,7 @@ export interface Database {
           duration_seconds?: number | null;
           results?: Json | null;
           pipecat_logs?: string | null;
+          failure_reason?: string | null;
           latency_data?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -140,6 +142,7 @@ export interface Database {
           duration_seconds?: number | null;
           results?: Json | null;
           pipecat_logs?: string | null;
+          failure_reason?: string | null;
           latency_data?: Json | null;
           created_at?: string;
           updated_at?: string;

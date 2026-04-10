@@ -52,6 +52,12 @@ export const AgentCallbackSchema = z.object({
   status: z.enum(['completed', 'failed']),
   results: z.record(z.unknown()).optional(),
   error: z.string().optional(),
+  failure_reason: z.enum([
+    'participant_no_show',
+    'meeting_join_failed',
+    'pipeline_error',
+    'agent_error',
+  ]).optional(),
 });
 
 export type AgentCallbackInput = z.infer<typeof AgentCallbackSchema>;

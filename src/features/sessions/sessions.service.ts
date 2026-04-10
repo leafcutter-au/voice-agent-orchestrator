@@ -74,6 +74,7 @@ class SessionsService {
       ended_at: now,
       duration_seconds: durationSeconds,
       results: (input.results as Json) ?? null,
+      failure_reason: input.failure_reason ?? null,
     });
 
     await this.api.insertEvent({
@@ -84,6 +85,7 @@ class SessionsService {
           : 'interview_failed',
       event_data: {
         ...(input.error && { error: input.error }),
+        ...(input.failure_reason && { failure_reason: input.failure_reason }),
         duration_seconds: durationSeconds,
       },
     });
@@ -114,6 +116,7 @@ class SessionsService {
             status: input.status,
             ...(input.results && { results: input.results }),
             ...(input.error && { error: input.error }),
+            ...(input.failure_reason && { failure_reason: input.failure_reason }),
           }),
           signal: AbortSignal.timeout(10000),
         });

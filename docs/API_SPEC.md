@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Base URL:** `http://localhost:3000` (development) or deployed host
-**Last updated:** 2026-03-21
+**Last updated:** 2026-04-02
 
 ## Authentication
 
@@ -243,7 +243,9 @@ Note: The `active` → `interviewing` transition happens on the agent side. Poll
 
 Receives interview results from agent containers. **No authentication required** (internal network only).
 
-Discovery does not call this endpoint — the orchestrator calls it internally. However, if `callback_url` was provided when creating the session, the orchestrator **forwards** the results to that URL with this payload:
+Discovery does not call this endpoint — the orchestrator calls it internally. However, if `callback_url` was provided when creating the session, the orchestrator **forwards** the results to that URL with this payload.
+
+If `CALLBACK_AUTH_TOKEN` is configured, the forwarded request includes an `Authorization: Bearer <token>` header. This must match Discovery's `VOICE_AGENT_WEBHOOK_SECRET`. Non-2xx responses from the callback URL are logged as errors.
 
 **Callback payload (forwarded to Discovery):**
 
@@ -285,11 +287,25 @@ Discovery does not call this endpoint — the orchestrator calls it internally. 
 |-------|------|-------------|
 | `session_id` | string (UUID) | The session that completed |
 | `status` | `"completed"` or `"failed"` | Outcome |
+| `failure_reason` | string or null | Classifies the failure cause (only when `status` is `"failed"`). See [Failure Reasons](#failure-reasons) below. |
 | `results` | object | Interview findings (only on completed). Schema is defined by the agent's report generator. |
 | `results.findings_summary` | object | Per-topic structured findings with status, summary, and sub-topic coverage |
 | `results.transcript` | array | Timestamped conversation transcript with speaker labels. Each entry has `turn` (int), `timestamp` (ISO 8601), `speaker` (`"interviewer"` or `"interviewee"`), `speaker_name` (string), and `text` (string). |
 
 Discovery should implement a webhook endpoint to receive this callback.
+
+### Failure Reasons
+
+When `status` is `"failed"`, the `failure_reason` field classifies the cause:
+
+| Value | Description |
+|-------|-------------|
+| `participant_no_show` | Agent joined the meeting and waited the full lobby timeout (15 min) but the participant was never admitted |
+| `meeting_join_failed` | Agent couldn't join the meeting (bad URL, Chrome crash, auth failure) |
+| `pipeline_error` | Interview started but the Pipecat pipeline crashed |
+| `agent_error` | Catch-all for other internal errors (audio routing, config, etc.) |
+
+The `failure_reason` field may be `null` for legacy failures that occurred before this field was introduced.
 
 ---
 
@@ -683,7 +699,8 @@ The orchestrator requires the following environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `API_SECRET_KEY` | Shared secret for Bearer token auth | Required |
+| `API_SECRET_KEY` | Shared secret for Bearer token auth (Discovery → Orchestrator) | Required |
+| `CALLBACK_AUTH_TOKEN` | Bearer token sent with callback forwarding (Orchestrator → Discovery). Must match Discovery's `VOICE_AGENT_WEBHOOK_SECRET`. | Optional |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Required |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key | Required |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Required |
@@ -714,6 +731,7 @@ Three tables in Supabase (PostgreSQL):
 | `stakeholder_name` | varchar | Extracted from config |
 | `stakeholder_role` | varchar | Extracted from config |
 | `callback_url` | text | URL for results delivery |
+| `failure_reason` | text | Failure classification (see [Failure Reasons](#failure-reasons)). Null for non-failed sessions. |
 | `started_at` | timestamptz | When agent was assigned |
 | `ended_at` | timestamptz | When session completed/failed/cancelled |
 | `duration_seconds` | integer | Calculated duration |

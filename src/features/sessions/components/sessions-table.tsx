@@ -212,6 +212,7 @@ function SessionTableRow({
       <td className="px-4 py-2">
         <SessionStatusBadge
           status={session.status as SessionStatus}
+          failureReason={session.failure_reason}
         />
       </td>
       <td className="text-muted-foreground px-4 py-2 text-xs">
